@@ -1,5 +1,5 @@
-import math
-from typing import Optional, Union
+import random
+from typing import Optional
 
 import numpy as np
 
@@ -8,44 +8,72 @@ from gymnasium import logger, spaces
 from gymnasium.envs.classic_control import utils
 from gymnasium.error import DependencyNotInstalled
 
-class CartPoleEnv(gym.Env):
+import pygame
+
+class Agent:
+    def __init__(self, x, y, radius=1):
+        self.x = x
+        self.y = y
+        self.radius = radius
+
+class Apple:
+    def __init__(self, x, y, radius=1):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.eaten = False
+
+    def eat(self):
+        self.eaten = True
+
+class SimRoblox(gym.Env):
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "render_fps": 50,
     }
 
     def __init__(self, render_mode: Optional[str] = None):
+        low = -17
         high = 17
+        # actions: 0 = up, 1 = right, 2 = down, 3 = left
         self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
+        # observations: agent x, agent y, apple x, apple y
+        self.observation_space = spaces.Box(low, high, shape=(4,),dtype=np.float32)
 
         self.render_mode = render_mode
 
         self.screen_width = 600
-        self.screen_height = 400
+        self.screen_height = 600
         self.screen = None
         self.clock = None
         self.isopen = True
         self.state = None
-
-        self.steps_beyond_terminated = None
 
     def step(self, action):
         err_msg = f"{action!r} ({type(action)}) invalid"
         assert self.action_space.contains(action), err_msg
         assert self.state is not None, "Call reset before using step method."
 
-        if apple.eaten:
+        # Place the step logic here
+
+        self.current_step = self.current_step + 1
+
+        # check if the agent has reached the apple
+        if self.apple.eaten:
             terminated = True
             reward = 5
 
+        # check if max steps has been reached
         max_steps = 256
         if max_steps > self.current_step:
             truncated =  True
 
         if self.render_mode == "human":
             self.render()
-        return np.array(self.state, dtype=np.float32), reward, terminated, truncated, {}
+
+        self.state = np.array([self.agent.x, self.agent.y, self.apple.x, self.apple.y], dtype=np.float32)
+
+        return self.state, reward, terminated, truncated, {}
 
     def reset(
         self,
@@ -54,17 +82,24 @@ class CartPoleEnv(gym.Env):
         options: Optional[dict] = None,
     ):
         super().reset(seed=seed)
-        # Note that if you use  custom reset bounds, it may lead to out-of-bound
-        # state/observations.
-        low, high = utils.maybe_parse_reset_bounds(
-            options, -0.05, 0.05  # default low
-        )  # default high
-        self.state = self.np_random.uniform(low=low, high=high, size=(4,))
-        self.steps_beyond_terminated = None
+
+        self.current_step = 0
+
+        self.apple = Apple(
+            x = 14,
+            y = 14,
+        )
+        self.agent = Agent(
+            x = (random.random() * 34) - 17, # random number between -17 and 17
+            y = (random.random() * 34) - 17, # random number between -17 and 17
+        )
+
+        self.state = np.array([self.agent.x, self.agent.y, self.apple.x, self.apple.y], dtype=np.float32)
 
         if self.render_mode == "human":
             self.render()
-        return np.array(self.state, dtype=np.float32), {}
+
+        return self.state, {}
 
     def render(self):
         if self.render_mode is None:
@@ -76,11 +111,10 @@ class CartPoleEnv(gym.Env):
             return
 
         try:
-            import pygame
             from pygame import gfxdraw
         except ImportError:
             raise DependencyNotInstalled(
-                "pygame is not installed, run `pip install gym[classic_control]`"
+                "pygame is not installed, run `pip install pygame`"
             )
 
         if self.screen is None:
@@ -95,61 +129,28 @@ class CartPoleEnv(gym.Env):
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
-        world_width = self.x_threshold * 2
-        scale = self.screen_width / world_width
-        polewidth = 10.0
-        polelen = scale * (2 * self.length)
-        cartwidth = 50.0
-        cartheight = 30.0
-
         if self.state is None:
             return None
-
-        x = self.state
 
         self.surf = pygame.Surface((self.screen_width, self.screen_height))
         self.surf.fill((255, 255, 255))
 
-        l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
-        axleoffset = cartheight / 4.0
-        cartx = x[0] * scale + self.screen_width / 2.0  # MIDDLE OF CART
-        carty = 100  # TOP OF CART
-        cart_coords = [(l, b), (l, t), (r, t), (r, b)]
-        cart_coords = [(c[0] + cartx, c[1] + carty) for c in cart_coords]
-        gfxdraw.aapolygon(self.surf, cart_coords, (0, 0, 0))
-        gfxdraw.filled_polygon(self.surf, cart_coords, (0, 0, 0))
+        pixel_multiplier = self.screen_width / 34 # this assumes the screen width==height
 
-        l, r, t, b = (
-            -polewidth / 2,
-            polewidth / 2,
-            polelen - polewidth / 2,
-            -polewidth / 2,
-        )
+        apple_coord_x = int((self.apple.x + 17) * pixel_multiplier)
+        apple_coord_y = int((self.apple.y + 17) * pixel_multiplier)
 
-        pole_coords = []
-        for coord in [(l, b), (l, t), (r, t), (r, b)]:
-            coord = pygame.math.Vector2(coord).rotate_rad(-x[2])
-            coord = (coord[0] + cartx, coord[1] + carty + axleoffset)
-            pole_coords.append(coord)
-        gfxdraw.aapolygon(self.surf, pole_coords, (202, 152, 101))
-        gfxdraw.filled_polygon(self.surf, pole_coords, (202, 152, 101))
+        agent_coord_x = int((self.agent.x + 17) * pixel_multiplier)
+        agent_coord_y = int((self.agent.y + 17) * pixel_multiplier)
 
-        gfxdraw.aacircle(
-            self.surf,
-            int(cartx),
-            int(carty + axleoffset),
-            int(polewidth / 2),
-            (129, 132, 203),
-        )
-        gfxdraw.filled_circle(
-            self.surf,
-            int(cartx),
-            int(carty + axleoffset),
-            int(polewidth / 2),
-            (129, 132, 203),
-        )
+        apple_radius = int(self.apple.radius * pixel_multiplier)
+        agent_radius = int(self.agent.radius * pixel_multiplier)
 
-        gfxdraw.hline(self.surf, 0, self.screen_width, carty, (0, 0, 0))
+        color_red = (255,0,0)
+        color_blue = (0,0,255)
+
+        gfxdraw.filled_circle(self.surf, apple_coord_x, apple_coord_y, apple_radius, color_red)
+        gfxdraw.filled_circle(self.surf, agent_coord_x, agent_coord_y, agent_radius, color_blue)
 
         self.surf = pygame.transform.flip(self.surf, False, True)
         self.screen.blit(self.surf, (0, 0))

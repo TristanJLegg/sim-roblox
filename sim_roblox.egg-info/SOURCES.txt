@@ -1,0 +1,10 @@
+README.md
+setup.py
+sim_roblox/__init__.py
+sim_roblox.egg-info/PKG-INFO
+sim_roblox.egg-info/SOURCES.txt
+sim_roblox.egg-info/dependency_links.txt
+sim_roblox.egg-info/requires.txt
+sim_roblox.egg-info/top_level.txt
+sim_roblox/envs/__init__.py
+sim_roblox/envs/sim_roblox.py
